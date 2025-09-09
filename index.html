@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Plot Sensor Data</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f9fdf9; }
+    header, footer { text-align: center; padding: 2rem 1rem; }
+    header { background: linear-gradient(135deg, #2a7a3b, #46b96c); color: white; }
+    header h1 { margin: 0 0 0.5rem; font-size: 2.2rem; }
+    main { max-width: 900px; margin: auto; padding: 2rem 1rem; }
+    .card { background: white; padding: 1.5rem; border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
+    h2 { color: #2a7a3b; margin-bottom: 1rem; }
+    #chart { width: 100%; height: 500px; }
+    footer { background: #eee; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Plot Sensor Data</h1>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Temperature Monitoring</h2>
+      <div id="chart">Temperature</div>
+    </section>
+  </main>
+
+  <script>
+    let lastTimestamp = null;  // track latest timestamp plotted
+    let initialized = false;
+    const windowHours = 12; // show last 12 hours
+
+    function fetchAndUpdate() {
+      Papa.parse("data/temperature.csv", {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        complete: function(results) {
+          const data = results.data.filter(row => row.timestamp && row.temperature_C !== undefined);
+
+          if (!data.length) return;
+
+          // Filter new rows only
+          let newData = data;
+          if (lastTimestamp) {
+            newData = data.filter(row => new Date(row.timestamp) > lastTimestamp);
+          }
+
+          if (newData.length > 0) {
+            const times = newData.map(r => new Date(r.timestamp));
+            const temps = newData.map(r => r.temperature_C);
+
+            if (!initialized) {
+              // First plot with all available data
+              const trace = {
+                x: data.map(r => new Date(r.timestamp)),
+                y: data.map(r => r.temperature_C),
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#2a7a3b' },
+                name: 'Temperature (°C)'
+              };
+              const layout = {
+                margin: { t: 20 },
+                xaxis: { title: 'Time' },
+                yaxis: { title: 'Temperature (°C)' }
+              };
+              Plotly.newPlot('chart', [trace], layout, {responsive: true});
+              initialized = true;
+            } else {
+              // Append new points
+              Plotly.extendTraces('chart', {x: [times], y: [temps]}, [0]);
+            }
+
+            // Update last timestamp
+            lastTimestamp = new Date(newData[newData.length-1].timestamp);
+
+            // Apply moving window (last 12 hours)
+            const windowStart = new Date(lastTimestamp.getTime() - windowHours*3600*1000);
+            Plotly.relayout('chart', {
+              'xaxis.range': [windowStart, lastTimestamp]
+            });
+          }
+        }
+      });
+    }
+
+    // Initial load
+    fetchAndUpdate();
+    // Update every 10 seconds
+    setInterval(fetchAndUpdate, 10000);
+  </script>
+</body>
+</html>
