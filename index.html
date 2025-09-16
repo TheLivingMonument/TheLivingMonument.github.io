@@ -17,6 +17,7 @@
     h2 { color: #2a7a3b; margin-bottom: 1rem; }
     .chart { width: 100%; height: 400px; }
     footer { background: #eee; font-size: 0.9rem; }
+    .loading { text-align: center; padding: 2rem; color: #2a7a3b; }
   </style>
 </head>
 <body>
@@ -25,7 +26,7 @@
   </header>
 
   <main id="charts">
-    <!-- I grafici verranno inseriti qui -->
+    <div class="loading" id="loading">Loading data...</div>
   </main>
 
   <footer>
@@ -33,14 +34,25 @@
   </footer>
 
   <script>
-    const csvFile = "data/livingMonumentData.txt";
+    const csvFile = "XXXX.csv"; // nome del file
+    // Definisce le colonne in base alla loro posizione
+    const columnPositions = {
+      TIME: 0,
+      PH: 1,
+      TDS: 2,
+      TEMPERATURE: 3,
+      HUMIDITY: 4,
+      LIGHT: 5,
+      WATER_LEVEL: 6
+    };
+    
     const sensors = [
-      { index: 1, name: "pH", color: "#2a7a3b" },
-      { index: 2, name: "TDS (ppm)", color: "#1f77b4" },
-      { index: 3, name: "Temperature (°C)", color: "#ff7f0e" },
-      { index: 4, name: "Humidity (%)", color: "#9467bd" },
-      { index: 5, name: "Light (lux)", color: "#8c564b" },
-      { index: 6, name: "Water Level", color: "#e377c2" }
+      { position: columnPositions.PH, name: "pH", color: "#2a7a3b", unit: "" },
+      { position: columnPositions.TDS, name: "TDS", color: "#1f77b4", unit: "ppm" },
+      { position: columnPositions.TEMPERATURE, name: "Temperature", color: "#ff7f0e", unit: "°C" },
+      { position: columnPositions.HUMIDITY, name: "Humidity", color: "#9467bd", unit: "%" },
+      { position: columnPositions.LIGHT, name: "Light", color: "#8c564b", unit: "lux" },
+      { position: columnPositions.WATER_LEVEL, name: "Water Level", color: "#e377c2", unit: "" }
     ];
 
     function createChart(containerId, title, x, y, color) {
@@ -64,40 +76,99 @@
     function loadData() {
       Papa.parse(csvFile, {
         download: true,
-        delimiter: ",",
+        header: false,  // Non usare l'header
         dynamicTyping: true,
-        skipEmptyLines: true,
         complete: function(results) {
-          const rows = results.data;
-
-          // converte timestamp in Date
-          const data = rows.map(r => ({
-            timestamp: new Date(r[0].replace(" ", "T")),
-            values: r.slice(1, 7)
-          }));
-
-          const times = data.map(d => d.timestamp);
-
+          // Rimuove il messaggio di caricamento
+          const loadingElement = document.getElementById("loading");
+          if (loadingElement) {
+            loadingElement.remove();
+          }
+          
+          // Estrae i dati e filtra le righe vuote
+          const rows = results.data.filter(row => row.length >= 7);
+          
+          if (rows.length === 0) {
+            document.getElementById("charts").innerHTML = "<div class='card'><p>No data available</p></div>";
+            return;
+          }
+          
+          // Converte i dati in formato leggibile
+          const data = rows.map(row => {
+            return {
+              time: new Date(row[columnPositions.TIME]),
+              pH: row[columnPositions.PH],
+              TDS: row[columnPositions.TDS],
+              temperature: row[columnPositions.TEMPERATURE],
+              humidity: row[columnPositions.HUMIDITY],
+              light: row[columnPositions.LIGHT],
+              waterLevel: row[columnPositions.WATER_LEVEL]
+            };
+          });
+          
+          // Trova l'ultimo timestamp nel dataset
+          const lastTime = new Date(Math.max(...data.map(d => d.time)));
+          
+          // Filtra i dati per mostrare solo gli ultimi 10 minuti
+          const tenMinutesAgo = new Date(lastTime.getTime() - 10 * 60 * 1000);
+          const recentData = data.filter(d => d.time >= tenMinutesAgo);
+          
+          // Estrae i tempi
+          const times = recentData.map(d => d.time);
+          
+          // Crea i grafici per ogni sensore
           sensors.forEach(sensor => {
-            const values = data.map(d => d.values[sensor.index - 1]);
-            const chartId = sensor.name.replace(/\s+/g, "-") + "-chart";
+            const values = recentData.map(d => {
+              // Usa l'indice di posizione per accedere ai valori
+              switch(sensor.position) {
+                case columnPositions.PH: return d.pH;
+                case columnPositions.TDS: return d.TDS;
+                case columnPositions.TEMPERATURE: return d.temperature;
+                case columnPositions.HUMIDITY: return d.humidity;
+                case columnPositions.LIGHT: return d.light;
+                case columnPositions.WATER_LEVEL: return d.waterLevel;
+                default: return null;
+              }
+            });
+            
+            const chartId = sensor.name.toLowerCase().replace(/\s+/g, '-') + "-chart";
+            const fullTitle = `${sensor.name}${sensor.unit ? ` (${sensor.unit})` : ''}`;
 
-            // crea il contenitore se non esiste
+            // Crea il contenitore se non esiste
             if (!document.getElementById(chartId)) {
               const section = document.createElement("section");
               section.className = "card";
-              section.innerHTML = `<h2>${sensor.name}</h2><div id="${chartId}" class="chart"></div>`;
+              section.innerHTML = `<h2>${fullTitle}</h2><div id="${chartId}" class="chart"></div>`;
               document.getElementById("charts").appendChild(section);
             }
 
-            createChart(chartId, sensor.name, times, values, sensor.color);
+            // Crea o aggiorna il grafico
+            const chartElement = document.getElementById(chartId);
+            if (chartElement) {
+              // Se il grafico esiste già, aggiornalo invece di crearne uno nuovo
+              if (chartElement.data) {
+                Plotly.update(chartId, {
+                  x: [times],
+                  y: [values]
+                }, {
+                  title: fullTitle
+                });
+              } else {
+                createChart(chartId, fullTitle, times, values, sensor.color);
+              }
+            }
           });
+        },
+        error: function(error) {
+          document.getElementById("loading").innerHTML = "Error loading data: " + error;
         }
       });
     }
 
+    // Carica dati iniziali
     loadData();
-    setInterval(loadData, 10000); // aggiorna ogni 10s
+    // Aggiorna ogni 10s
+    setInterval(loadData, 10000);
   </script>
 </body>
 </html>
