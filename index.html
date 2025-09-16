@@ -1,69 +1,175 @@
-<script>
-const csvFile = "data/livingMonumentData.txt";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Plot Sensor Data</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f9fdf9; }
+    header, footer { text-align: center; padding: 2rem 1rem; }
+    header { background: linear-gradient(135deg, #2a7a3b, #46b96c); color: white; }
+    header h1 { margin: 0 0 0.5rem; font-size: 2.2rem; }
+    main { max-width: 1000px; margin: auto; padding: 2rem 1rem; }
+    .card { background: white; padding: 1.5rem; border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+    h2 { color: #2a7a3b; margin-bottom: 1rem; }
+    .chart { width: 100%; height: 400px; }
+    footer { background: #eee; font-size: 0.9rem; }
+    .loading { text-align: center; padding: 2rem; color: #2a7a3b; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Plot Sensor Data</h1>
+  </header>
 
-// sensori in ordine, corrispondente alle colonne (senza timestamp)
-const sensors = [
-  { name: "pH", color: "#2a7a3b" },
-  { name: "TDS (ppm)", color: "#1f77b4" },
-  { name: "Temperature (°C)", color: "#ff7f0e" },
-  { name: "Humidity (%)", color: "#9467bd" },
-  { name: "Light (lux)", color: "#8c564b" },
-  { name: "Water Level", color: "#e377c2" }
-];
+  <main id="charts">
+    <div class="loading" id="loading">Loading data...</div>
+  </main>
 
-function createChart(containerId, title, x, y, color) {
-  const trace = {
-    x: x,
-    y: y,
-    type: "scatter",
-    mode: "lines",
-    line: { color: color },
-    name: title
-  };
-  const layout = {
-    margin: { t: 30 },
-    title: title,
-    xaxis: { title: "Time" },
-    yaxis: { title: title }
-  };
-  Plotly.newPlot(containerId, [trace], layout, {responsive: true});
-}
+  <footer>
+    <p>Sensor monitoring dashboard</p>
+  </footer>
 
-function loadData() {
-  Papa.parse(csvFile, {
-    download: true,
-    dynamicTyping: true,
-    complete: function(results) {
-      // filtriamo solo le righe valide e convertiamo il timestamp
-      const now = new Date();
-      const data = results.data.filter(r => r.length >= 7).map(r => {
-        return {
-          timestamp: new Date(r[0].replace(" ", "T")), // trasforma "YYYY-mm-dd hh:mm:ss" in ISO
-          values: r.slice(1, 7) // colonne dei sensori
-        };
-      }).filter(r => now - r.timestamp <= 10*60*1000); // ultimi 10 minuti
+  <script>
+    const csvFile = "data/livingMonumentData.txt"; // nome del file
+    // Definisce le colonne in base alla loro posizione
+    const columnPositions = {
+      TIME: 0,
+      PH: 1,
+      TDS: 2,
+      TEMPERATURE: 3,
+      HUMIDITY: 4,
+      LIGHT: 5,
+      WATER_LEVEL: 6
+    };
+    
+    const sensors = [
+      { position: columnPositions.PH, name: "pH", color: "#2a7a3b", unit: "" },
+      { position: columnPositions.TDS, name: "TDS", color: "#1f77b4", unit: "ppm" },
+      { position: columnPositions.TEMPERATURE, name: "Temperature", color: "#ff7f0e", unit: "°C" },
+      { position: columnPositions.HUMIDITY, name: "Humidity", color: "#9467bd", unit: "%" },
+      { position: columnPositions.LIGHT, name: "Light", color: "#8c564b", unit: "lux" },
+      { position: columnPositions.WATER_LEVEL, name: "Water Level", color: "#e377c2", unit: "" }
+    ];
 
-      const times = data.map(r => r.timestamp);
+    function createChart(containerId, title, x, y, color) {
+      const trace = {
+        x: x,
+        y: y,
+        type: "scatter",
+        mode: "lines",
+        line: { color: color },
+        name: title
+      };
+      const layout = {
+        margin: { t: 30 },
+        title: title,
+        xaxis: { title: "Time" },
+        yaxis: { title: title }
+      };
+      Plotly.newPlot(containerId, [trace], layout, {responsive: true});
+    }
 
-      sensors.forEach((sensor, idx) => {
-        const values = data.map(r => r.values[idx]);
-        const chartId = "sensor-" + idx + "-chart";
+    function loadData() {
+      Papa.parse(csvFile, {
+        download: true,
+        header: false,  // Non usare l'header
+        dynamicTyping: true,
+        complete: function(results) {
+          // Rimuove il messaggio di caricamento
+          const loadingElement = document.getElementById("loading");
+          if (loadingElement) {
+            loadingElement.remove();
+          }
+          
+          // Estrae i dati e filtra le righe vuote
+          const rows = results.data.filter(row => row.length >= 7);
+          
+          if (rows.length === 0) {
+            document.getElementById("charts").innerHTML = "<div class='card'><p>No data available</p></div>";
+            return;
+          }
+          
+          // Converte i dati in formato leggibile
+          const data = rows.map(row => {
+            return {
+              time: new Date(row[columnPositions.TIME]),
+              pH: row[columnPositions.PH],
+              TDS: row[columnPositions.TDS],
+              temperature: row[columnPositions.TEMPERATURE],
+              humidity: row[columnPositions.HUMIDITY],
+              light: row[columnPositions.LIGHT],
+              waterLevel: row[columnPositions.WATER_LEVEL]
+            };
+          });
+          
+          // Trova l'ultimo timestamp nel dataset
+          const lastTime = new Date(Math.max(...data.map(d => d.time)));
+          
+          // Filtra i dati per mostrare solo gli ultimi 10 minuti
+          const tenMinutesAgo = new Date(lastTime.getTime() - 10 * 60 * 1000);
+          const recentData = data.filter(d => d.time >= tenMinutesAgo);
+          
+          // Estrae i tempi
+          const times = recentData.map(d => d.time);
+          
+          // Crea i grafici per ogni sensore
+          sensors.forEach(sensor => {
+            const values = recentData.map(d => {
+              // Usa l'indice di posizione per accedere ai valori
+              switch(sensor.position) {
+                case columnPositions.PH: return d.pH;
+                case columnPositions.TDS: return d.TDS;
+                case columnPositions.TEMPERATURE: return d.temperature;
+                case columnPositions.HUMIDITY: return d.humidity;
+                case columnPositions.LIGHT: return d.light;
+                case columnPositions.WATER_LEVEL: return d.waterLevel;
+                default: return null;
+              }
+            });
+            
+            const chartId = sensor.name.toLowerCase().replace(/\s+/g, '-') + "-chart";
+            const fullTitle = `${sensor.name}${sensor.unit ? ` (${sensor.unit})` : ''}`;
 
-        if (!document.getElementById(chartId)) {
-          const section = document.createElement("section");
-          section.className = "card";
-          section.innerHTML = `<h2>${sensor.name}</h2><div id="${chartId}" class="chart"></div>`;
-          document.getElementById("charts").appendChild(section);
+            // Crea il contenitore se non esiste
+            if (!document.getElementById(chartId)) {
+              const section = document.createElement("section");
+              section.className = "card";
+              section.innerHTML = `<h2>${fullTitle}</h2><div id="${chartId}" class="chart"></div>`;
+              document.getElementById("charts").appendChild(section);
+            }
+
+            // Crea o aggiorna il grafico
+            const chartElement = document.getElementById(chartId);
+            if (chartElement) {
+              // Se il grafico esiste già, aggiornalo invece di crearne uno nuovo
+              if (chartElement.data) {
+                Plotly.update(chartId, {
+                  x: [times],
+                  y: [values]
+                }, {
+                  title: fullTitle
+                });
+              } else {
+                createChart(chartId, fullTitle, times, values, sensor.color);
+              }
+            }
+          });
+        },
+        error: function(error) {
+          document.getElementById("loading").innerHTML = "Error loading data: " + error;
         }
-
-        createChart(chartId, sensor.name, times, values, sensor.color);
       });
     }
-  });
-}
 
-// carica inizialmente
-loadData();
-// aggiorna ogni 10 secondi
-setInterval(loadData, 10000);
-</script>
+    // Carica dati iniziali
+    loadData();
+    // Aggiorna ogni 10s
+    setInterval(loadData, 10000);
+  </script>
+</body>
+
+</html>
