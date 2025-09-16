@@ -76,17 +76,10 @@
             values: r.slice(1, 7)
           }));
 
-          if (data.length === 0) return;
-
-          // trova l'ultimo timestamp disponibile
-          const latestTime = data[data.length - 1].timestamp;
-          const tenMinutes = 10 * 60 * 1000;
-          const filteredData = data.filter(d => latestTime - d.timestamp <= tenMinutes);
-
-          const times = filteredData.map(d => d.timestamp);
+          const times = data.map(d => d.timestamp);
 
           sensors.forEach(sensor => {
-            const values = filteredData.map(d => d.values[sensor.index - 1]);
+            const values = data.map(d => d.values[sensor.index - 1]);
             const chartId = sensor.name.replace(/\s+/g, "-") + "-chart";
 
             // crea il contenitore se non esiste
