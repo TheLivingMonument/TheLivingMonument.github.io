@@ -11,11 +11,11 @@
     header, footer { text-align: center; padding: 2rem 1rem; }
     header { background: linear-gradient(135deg, #2a7a3b, #46b96c); color: white; }
     header h1 { margin: 0 0 0.5rem; font-size: 2.2rem; }
-    main { max-width: 900px; margin: auto; padding: 2rem 1rem; }
+    main { max-width: 1000px; margin: auto; padding: 2rem 1rem; }
     .card { background: white; padding: 1.5rem; border-radius: 12px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 2rem; }
     h2 { color: #2a7a3b; margin-bottom: 1rem; }
-    #chart { width: 100%; height: 500px; }
+    .chart { width: 100%; height: 400px; }
     footer { background: #eee; font-size: 0.9rem; }
   </style>
 </head>
@@ -24,77 +24,75 @@
     <h1>Plot Sensor Data</h1>
   </header>
 
-  <main>
-    <section class="card">
-      <h2>Temperature Monitoring</h2>
-      <div id="chart">Temperature</div>
-    </section>
+  <main id="charts">
+    <!-- I grafici verranno inseriti qui in automatico -->
   </main>
 
-  <script>
-    let lastTimestamp = null;  // track latest timestamp plotted
-    let initialized = false;
-    const windowHours = 12; // show last 12 hours
+  <footer>
+    <p>Sensor monitoring dashboard</p>
+  </footer>
 
-    function fetchAndUpdate() {
-      Papa.parse("data/temperature.csv", {
+  <script>
+    const csvFile = "XXXX.csv"; // nome del file
+    const sensors = [
+      { column: "pH", name: "pH", color: "#2a7a3b" },
+      { column: "TDS", name: "TDS (ppm)", color: "#1f77b4" },
+      { column: "temperature", name: "Temperature (°C)", color: "#ff7f0e" },
+      { column: "humidity", name: "Humidity (%)", color: "#9467bd" },
+      { column: "light", name: "Light (lux)", color: "#8c564b" },
+      { column: "water_level", name: "Water Level", color: "#e377c2" }
+    ];
+
+    function createChart(containerId, title, x, y, color) {
+      const trace = {
+        x: x,
+        y: y,
+        type: "scatter",
+        mode: "lines",
+        line: { color: color },
+        name: title
+      };
+      const layout = {
+        margin: { t: 30 },
+        title: title,
+        xaxis: { title: "Time" },
+        yaxis: { title: title }
+      };
+      Plotly.newPlot(containerId, [trace], layout, {responsive: true});
+    }
+
+    function loadData() {
+      Papa.parse(csvFile, {
         download: true,
         header: true,
         dynamicTyping: true,
         complete: function(results) {
-          const data = results.data.filter(row => row.timestamp && row.temperature_C !== undefined);
+          const data = results.data.filter(r => r.timestamp);
+          const times = data.map(r => new Date(r.timestamp));
 
-          if (!data.length) return;
+          sensors.forEach(sensor => {
+            const values = data.map(r => r[sensor.column]);
+            const chartId = sensor.column + "-chart";
 
-          // Filter new rows only
-          let newData = data;
-          if (lastTimestamp) {
-            newData = data.filter(row => new Date(row.timestamp) > lastTimestamp);
-          }
-
-          if (newData.length > 0) {
-            const times = newData.map(r => new Date(r.timestamp));
-            const temps = newData.map(r => r.temperature_C);
-
-            if (!initialized) {
-              // First plot with all available data
-              const trace = {
-                x: data.map(r => new Date(r.timestamp)),
-                y: data.map(r => r.temperature_C),
-                type: 'scatter',
-                mode: 'lines',
-                line: { color: '#2a7a3b' },
-                name: 'Temperature (°C)'
-              };
-              const layout = {
-                margin: { t: 20 },
-                xaxis: { title: 'Time' },
-                yaxis: { title: 'Temperature (°C)' }
-              };
-              Plotly.newPlot('chart', [trace], layout, {responsive: true});
-              initialized = true;
-            } else {
-              // Append new points
-              Plotly.extendTraces('chart', {x: [times], y: [temps]}, [0]);
+            // crea il contenitore se non esiste
+            if (!document.getElementById(chartId)) {
+              const section = document.createElement("section");
+              section.className = "card";
+              section.innerHTML = `<h2>${sensor.name}</h2><div id="${chartId}" class="chart"></div>`;
+              document.getElementById("charts").appendChild(section);
             }
 
-            // Update last timestamp
-            lastTimestamp = new Date(newData[newData.length-1].timestamp);
-
-            // Apply moving window (last 12 hours)
-            const windowStart = new Date(lastTimestamp.getTime() - windowHours*3600*1000);
-            Plotly.relayout('chart', {
-              'xaxis.range': [windowStart, lastTimestamp]
-            });
-          }
+            // crea il grafico
+            createChart(chartId, sensor.name, times, values, sensor.color);
+          });
         }
       });
     }
 
-    // Initial load
-    fetchAndUpdate();
-    // Update every 10 seconds
-    setInterval(fetchAndUpdate, 10000);
+    // carica dati iniziali
+    loadData();
+    // aggiorna ogni 10s
+    setInterval(loadData, 10000);
   </script>
 </body>
 </html>
