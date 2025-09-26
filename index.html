@@ -3,26 +3,102 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Plot Sensor Data</title>
+  <title>REAL TIME MONITORING</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
   <style>
-    body { font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f9fdf9; }
-    header, footer { text-align: center; padding: 2rem 1rem; }
-    header { background: linear-gradient(135deg, #2a7a3b, #46b96c); color: white; }
-    header h1 { margin: 0 0 0.5rem; font-size: 2.2rem; }
-    main { max-width: 1000px; margin: auto; padding: 2rem 1rem; }
-    .card { background: white; padding: 1.5rem; border-radius: 12px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 2rem; }
-    h2 { color: #2a7a3b; margin-bottom: 1rem; }
-    .chart { width: 100%; height: 400px; }
-    footer { background: #eee; font-size: 0.9rem; }
-    .loading { text-align: center; padding: 2rem; color: #2a7a3b; }
+    body {
+      font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      background: #f2fcdd;
+      color: #333;
+    }
+
+    header {
+      background: linear-gradient(135deg, #2d752b, #2d752b);
+      color: white;
+      text-align: center;
+      padding: 2rem 1rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2.5rem;
+      font-weight: 600;
+    }
+    header p {
+      margin: 0.3rem 0 0;
+      font-size: 1rem;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: auto;
+      padding: 2rem 1rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 16px;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 18px rgba(0,0,0,0.12);
+    }
+
+    h2 {
+      color: #2a7a3b;
+      margin-bottom: 0.5rem;
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+
+    .chart {
+      width: 100%;
+      height: 400px;
+      opacity: 0;
+      animation: fadeIn 1s forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    footer {
+      background: #f0f0f0;
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.9rem;
+      color: #555;
+      margin-top: 2rem;
+      border-top: 1px solid #ddd;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #2a7a3b;
+      font-size: 1.2rem;
+      font-weight: 500;
+    }
   </style>
 </head>
+
 <body>
   <header>
-    <h1>Plot Sensor Data</h1>
+    <h1>REAL TIME MONITORING</h1>
+    <p>Discover how the Living Monument is doing by checking the real time measurements provided by the sensors!</p>
   </header>
 
   <main id="charts">
@@ -34,8 +110,7 @@
   </footer>
 
   <script>
-    const csvFile = "data/livingMonumentData.txt"; // nome del file
-    // Definisce le colonne in base alla loro posizione
+    const csvFile = "data/livingMonumentData.txt";
     const columnPositions = {
       TIME: 0,
       PH: 1,
@@ -45,81 +120,63 @@
       LIGHT: 5,
       WATER_LEVEL: 6
     };
-    
+
     const sensors = [
       { position: columnPositions.PH, name: "pH", color: "#2a7a3b", unit: "" },
-      { position: columnPositions.TDS, name: "TDS", color: "#1f77b4", unit: "ppm" },
-      { position: columnPositions.TEMPERATURE, name: "Temperature", color: "#ff7f0e", unit: "°C" },
-      { position: columnPositions.HUMIDITY, name: "Humidity", color: "#9467bd", unit: "%" },
-      { position: columnPositions.LIGHT, name: "Light", color: "#8c564b", unit: "lux" },
-      { position: columnPositions.WATER_LEVEL, name: "Water Level", color: "#e377c2", unit: "" }
+      { position: columnPositions.TDS, name: "Total Dissolved Solids", color: "#8B4513", unit: "ppm" },
+      { position: columnPositions.TEMPERATURE, name: "Temperature", color: "#808080", unit: "°C" },
+      { position: columnPositions.HUMIDITY, name: "Humidity", color: "#00CED1", unit: "%" },
+      { position: columnPositions.LIGHT, name: "Light Intensity", color: "#FFA500", unit: "lux" },
+      { position: columnPositions.WATER_LEVEL, name: "Water Level", color: "#1E90FF", unit: "%" }
     ];
 
     function createChart(containerId, title, x, y, color) {
-      const trace = {
-        x: x,
-        y: y,
-        type: "scatter",
-        mode: "lines",
-        line: { color: color },
-        name: title
+      const traceLine = { x, y, type: "scatter", mode: "lines", line: { color }};
+      const traceLast = {
+        x: [x[x.length - 1]],
+        y: [y[y.length - 1]],
+        mode: "markers+text",
+        marker: { color: color, size: 12 },
+        text: [`<b>${y[y.length - 1]}</b>`], 
+        textposition: "top center",
+        showlegend: false
       };
-      const layout = {
-        margin: { t: 30 },
-        title: title,
-        xaxis: { title: "Time" },
-        yaxis: { title: title }
-      };
-      Plotly.newPlot(containerId, [trace], layout, {responsive: true});
+      const layout = { margin: { t: 30 }, xaxis: { title: "Time"}, yaxis: { title, autorange: true  }, showlegend: false };
+      Plotly.newPlot(containerId, [traceLine, traceLast], layout, { responsive: true });
     }
 
     function loadData() {
       Papa.parse(csvFile, {
         download: true,
-        header: false,  // Non usare l'header
+        header: false,
         dynamicTyping: true,
         complete: function(results) {
-          // Rimuove il messaggio di caricamento
           const loadingElement = document.getElementById("loading");
-          if (loadingElement) {
-            loadingElement.remove();
-          }
-          
-          // Estrae i dati e filtra le righe vuote
+          if (loadingElement) loadingElement.remove();
+
           const rows = results.data.filter(row => row.length >= 7);
-          
           if (rows.length === 0) {
             document.getElementById("charts").innerHTML = "<div class='card'><p>No data available</p></div>";
             return;
           }
-          
-          // Converte i dati in formato leggibile
-          const data = rows.map(row => {
-            return {
-              time: new Date(row[columnPositions.TIME]),
-              pH: row[columnPositions.PH],
-              TDS: row[columnPositions.TDS],
-              temperature: row[columnPositions.TEMPERATURE],
-              humidity: row[columnPositions.HUMIDITY],
-              light: row[columnPositions.LIGHT],
-              waterLevel: row[columnPositions.WATER_LEVEL]
-            };
-          });
-          
-          // Trova l'ultimo timestamp nel dataset
+
+          const data = rows.map(row => ({
+            time: new Date(row[columnPositions.TIME]),
+            pH: row[columnPositions.PH],
+            TDS: row[columnPositions.TDS],
+            temperature: row[columnPositions.TEMPERATURE],
+            humidity: row[columnPositions.HUMIDITY],
+            light: row[columnPositions.LIGHT],
+            waterLevel: row[columnPositions.WATER_LEVEL]
+          }));
+
           const lastTime = new Date(Math.max(...data.map(d => d.time)));
-          
-          // Filtra i dati per mostrare solo gli ultimi 10 minuti
           const tenMinutesAgo = new Date(lastTime.getTime() - 10 * 60 * 1000);
           const recentData = data.filter(d => d.time >= tenMinutesAgo);
-          
-          // Estrae i tempi
           const times = recentData.map(d => d.time);
-          
-          // Crea i grafici per ogni sensore
+
           sensors.forEach(sensor => {
             const values = recentData.map(d => {
-              // Usa l'indice di posizione per accedere ai valori
               switch(sensor.position) {
                 case columnPositions.PH: return d.pH;
                 case columnPositions.TDS: return d.TDS;
@@ -130,11 +187,10 @@
                 default: return null;
               }
             });
-            
-            const chartId = sensor.name.toLowerCase().replace(/\s+/g, '-') + "-chart";
-            const fullTitle = `${sensor.name}${sensor.unit ? ` (${sensor.unit})` : ''}`;
 
-            // Crea il contenitore se non esiste
+            const chartId = sensor.name.toLowerCase().replace(/\s+/g, '-') + "-chart";
+            const fullTitle = `${sensor.name}${sensor.unit ? ` [${sensor.unit}]` : ''}`;
+
             if (!document.getElementById(chartId)) {
               const section = document.createElement("section");
               section.className = "card";
@@ -142,20 +198,9 @@
               document.getElementById("charts").appendChild(section);
             }
 
-            // Crea o aggiorna il grafico
             const chartElement = document.getElementById(chartId);
             if (chartElement) {
-              // Se il grafico esiste già, aggiornalo invece di crearne uno nuovo
-              if (chartElement.data) {
-                Plotly.update(chartId, {
-                  x: [times],
-                  y: [values]
-                }, {
-                  title: fullTitle
-                });
-              } else {
-                createChart(chartId, fullTitle, times, values, sensor.color);
-              }
+              createChart(chartId, fullTitle, times, values, sensor.color);
             }
           });
         },
@@ -165,11 +210,8 @@
       });
     }
 
-    // Carica dati iniziali
     loadData();
-    // Aggiorna ogni 10s
     setInterval(loadData, 10000);
   </script>
 </body>
-
 </html>
